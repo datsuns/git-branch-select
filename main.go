@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -56,6 +57,21 @@ func generate_branch_list() []string {
 	return ret
 }
 
+// append "(?i)" means case insensitive search
+func generate_branch_list_with_filter(filter string) []string {
+	all := generate_branch_list()
+	pattern := "(?i)" + fmt.Sprintf(".*%s.*", filter)
+	key, _ := regexp.Compile(pattern)
+	ret := []string{}
+	for _, branch := range all {
+		if key.FindStringIndex(branch) != nil {
+			ret = append(ret, branch)
+		}
+	}
+
+	return ret
+}
+
 func get_target_branch_index() (int, error) {
 	fmt.Printf("insert target index: ")
 	reader := bufio.NewReader(os.Stdin)
@@ -78,7 +94,13 @@ func switch_git_branch(branch string) {
 }
 
 func main() {
-	list := generate_branch_list()
+	var list []string
+	if len(os.Args) < 2 {
+		list = generate_branch_list()
+	} else {
+		fmt.Printf(" w/ filter [%s]\n", os.Args[1])
+		list = generate_branch_list_with_filter(os.Args[1])
+	}
 
 	for i, b := range list {
 		fmt.Printf("%2d: %s\n", i, b)
