@@ -7,12 +7,26 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/urfave/cli"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+var verboseMode bool
+
+var OptionFlags = []cli.Flag{
+	cli.BoolFlag{
+		Name:  "all, a",
+		Usage: "select from --all",
+	},
+	cli.BoolFlag{
+		Name:  "verbose, V",
+		Usage: "verbose mode",
+	},
+}
 
 func execute(tool string, params []string, debug bool) string {
 	if debug {
@@ -31,22 +45,26 @@ func executable(bin string) bool {
 		fmt.Printf("%v\n", err)
 		return false
 	} else {
-		fmt.Printf("[%s] is located at [%s]\n", bin, path)
+		if verboseMode {
+			fmt.Printf("[%s] is located at [%s]\n", bin, path)
+		}
 		return true
 	}
 }
 
-func generate_branch_list() []string {
+func generate_branch_list(from_all bool) []string {
 	ret := []string{}
-	params := [][]string{
-		//{"branch", "--all"},
-		{"branch"},
+	var params [][]string
+	if from_all {
+		params = [][]string{{"branch", "--all"}}
+	} else {
+		params = [][]string{{"branch"}}
 	}
 	if !executable("git") {
 		return ret
 	}
 	for _, p := range params {
-		log := execute("git", p, true)
+		log := execute("git", p, verboseMode)
 		for _, s := range strings.Split(log, "\n") {
 			name := strings.Trim(s, " *")
 			if len(name) > 0 {
@@ -58,8 +76,8 @@ func generate_branch_list() []string {
 }
 
 // append "(?i)" means case insensitive search
-func generate_branch_list_with_filter(filter string) []string {
-	all := generate_branch_list()
+func generate_branch_list_with_filter(from_all bool, filter string) []string {
+	all := generate_branch_list(from_all)
 	pattern := "(?i)" + fmt.Sprintf(".*%s.*", filter)
 	key, _ := regexp.Compile(pattern)
 	ret := []string{}
@@ -88,18 +106,20 @@ func switch_git_branch(branch string) {
 		{"status"},
 	}
 	for _, p := range params {
-		log := execute("git", p, true)
+		log := execute("git", p, verboseMode)
 		fmt.Println(log)
 	}
 }
 
-func main() {
+func entry(c *cli.Context) error {
 	var list []string
-	if len(os.Args) < 2 {
-		list = generate_branch_list()
+	var from_all = c.Bool("all")
+	verboseMode = c.Bool("verbose")
+	if c.NArg() == 0 {
+		list = generate_branch_list(from_all)
 	} else {
 		fmt.Printf(" w/ filter [%s]\n", os.Args[1])
-		list = generate_branch_list_with_filter(os.Args[1])
+		list = generate_branch_list_with_filter(from_all, os.Args[1])
 	}
 
 	for i, b := range list {
@@ -111,4 +131,17 @@ func main() {
 		fmt.Printf("index is %d\n", num)
 		switch_git_branch(list[num])
 	}
+	return nil
+}
+
+func main() {
+	app := cli.NewApp()
+	app.Name = "git-branch-select"
+	app.Usage = "branch selector to checkout specified branch"
+	app.Version = "1.0.0"
+	app.Commands = nil
+	app.Action = entry
+	app.Flags = OptionFlags
+
+	app.Run(os.Args)
 }
